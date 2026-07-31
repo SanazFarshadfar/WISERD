@@ -1,0 +1,243 @@
+
+WITH postcode_data AS (
+    SELECT
+        a.postcode,
+        a.estimated_accessible_jobs,
+        b.total AS population
+    FROM swansea.postcode_accessibility_0700_0745 AS a
+
+    LEFT JOIN swansea.swansea_postcode AS b
+        ON a.postcode = b.postcode
+),
+
+positive_jobs_quartiles AS (
+    SELECT
+        postcode,
+        estimated_accessible_jobs,
+        population,
+
+        NTILE(4) OVER (
+            ORDER BY estimated_accessible_jobs
+        ) AS quartile
+    FROM postcode_data
+    WHERE estimated_accessible_jobs > 0
+),
+
+categorised_postcodes AS (
+    -- Postcodes with zero accessible jobs
+    SELECT
+        postcode,
+        estimated_accessible_jobs,
+        population,
+        0 AS category_order
+    FROM postcode_data
+    WHERE estimated_accessible_jobs = 0
+
+    UNION ALL
+
+    -- Positive values divided into four quartiles
+    SELECT
+        postcode,
+        estimated_accessible_jobs,
+        population,
+        quartile AS category_order
+    FROM positive_jobs_quartiles
+),
+
+quartile_boundaries AS (
+    SELECT
+        category_order,
+        MIN(estimated_accessible_jobs) AS minimum_jobs,
+        MAX(estimated_accessible_jobs) AS maximum_jobs,
+        COUNT(*) AS postcode_count,
+        SUM(COALESCE(population, 0)) AS population
+    FROM categorised_postcodes
+    GROUP BY category_order
+),
+
+category_totals AS (
+    SELECT
+        category_order,
+
+        CASE
+            WHEN category_order = 0 THEN
+                '0 jobs'
+            ELSE
+                'Q' || category_order || ': '
+                || TO_CHAR(minimum_jobs, 'FM999,999,999')
+                || '–'
+                || TO_CHAR(maximum_jobs, 'FM999,999,999')
+                || ' jobs'
+        END AS job_access_category,
+
+        minimum_jobs,
+        maximum_jobs,
+        postcode_count,
+        population
+    FROM quartile_boundaries
+)
+
+SELECT
+    job_access_category,
+    minimum_jobs,
+    maximum_jobs,
+    postcode_count,
+    population,
+
+    SUM(postcode_count) OVER (
+        ORDER BY category_order
+    ) AS cumulative_postcode_count,
+
+    SUM(population) OVER (
+        ORDER BY category_order
+    ) AS cumulative_population
+
+FROM category_totals
+ORDER BY category_order;
+------------------------------------------------------------------------------------------------------------------------
+WITH all_periods AS (
+    SELECT estimated_accessible_jobs
+    FROM swansea.postcode_accessibility_0700_0745
+
+    UNION ALL
+
+    SELECT estimated_accessible_jobs
+    FROM swansea.postcode_accessibility_0800_0845
+
+    UNION ALL
+
+    SELECT estimated_accessible_jobs
+    FROM swansea.postcode_accessibility_1300_1345
+
+    UNION ALL
+
+    SELECT estimated_accessible_jobs
+    FROM swansea.postcode_accessibility_1800_1845
+),
+
+global_boundaries AS (
+    SELECT
+        percentile_cont(0.25) WITHIN GROUP (
+            ORDER BY estimated_accessible_jobs
+        ) AS q1_upper,
+
+        percentile_cont(0.50) WITHIN GROUP (
+            ORDER BY estimated_accessible_jobs
+        ) AS q2_upper,
+
+        percentile_cont(0.75) WITHIN GROUP (
+            ORDER BY estimated_accessible_jobs
+        ) AS q3_upper
+
+    FROM all_periods
+    WHERE estimated_accessible_jobs > 0
+),
+
+postcode_data AS (
+    SELECT
+        a.postcode,
+        a.estimated_accessible_jobs,
+        COALESCE(b.total, 0) AS population
+
+    FROM swansea.postcode_accessibility_1800_1845 AS a
+
+    LEFT JOIN swansea.swansea_postcode AS b
+        ON a.postcode = b.postcode
+),
+
+categorised_postcodes AS (
+    SELECT
+        p.postcode,
+        p.estimated_accessible_jobs,
+        p.population,
+
+        CASE
+            WHEN p.estimated_accessible_jobs = 0 THEN 0
+            WHEN p.estimated_accessible_jobs <= g.q1_upper THEN 1
+            WHEN p.estimated_accessible_jobs <= g.q2_upper THEN 2
+            WHEN p.estimated_accessible_jobs <= g.q3_upper THEN 3
+            ELSE 4
+        END AS category_order
+
+    FROM postcode_data AS p
+    CROSS JOIN global_boundaries AS g
+),
+
+category_totals AS (
+    SELECT
+        category_order,
+        COUNT(*) AS postcode_count,
+        SUM(population) AS population,
+
+        MIN(estimated_accessible_jobs) AS actual_minimum_jobs,
+        MAX(estimated_accessible_jobs) AS actual_maximum_jobs
+
+    FROM categorised_postcodes
+    GROUP BY category_order
+),
+
+formatted_categories AS (
+    SELECT
+        c.category_order,
+
+        CASE
+            WHEN c.category_order = 0 THEN
+                '0 jobs'
+
+            WHEN c.category_order = 1 THEN
+                'Q1: >0–'
+                || TO_CHAR(CEIL(g.q1_upper), 'FM999,999,999')
+                || ' jobs'
+
+            WHEN c.category_order = 2 THEN
+                'Q2: >'
+                || TO_CHAR(CEIL(g.q1_upper), 'FM999,999,999')
+                || '–'
+                || TO_CHAR(CEIL(g.q2_upper), 'FM999,999,999')
+                || ' jobs'
+
+            WHEN c.category_order = 3 THEN
+                'Q3: >'
+                || TO_CHAR(CEIL(g.q2_upper), 'FM999,999,999')
+                || '–'
+                || TO_CHAR(CEIL(g.q3_upper), 'FM999,999,999')
+                || ' jobs'
+
+            WHEN c.category_order = 4 THEN
+                'Q4: >'
+                || TO_CHAR(CEIL(g.q3_upper), 'FM999,999,999')
+                || ' jobs'
+        END AS job_access_category,
+
+        c.actual_minimum_jobs,
+        c.actual_maximum_jobs,
+        c.postcode_count,
+        c.population,
+
+        g.q1_upper,
+        g.q2_upper,
+        g.q3_upper
+
+    FROM category_totals AS c
+    CROSS JOIN global_boundaries AS g
+)
+
+SELECT
+    job_access_category,
+
+    actual_minimum_jobs,
+    actual_maximum_jobs,
+
+    postcode_count,
+    population,
+
+    SUM(postcode_count) OVER (
+        ORDER BY category_order
+    ) AS cumulative_postcode_count,
+
+    SUM(population) OVER (
+        ORDER BY category_order
+    ) AS cumulative_population
+
+FROM formatted_categories
+ORDER BY category_order;
