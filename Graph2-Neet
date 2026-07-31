@@ -1,0 +1,150 @@
+	WITH postcode_lsoa AS (
+
+	    SELECT DISTINCT ON (UPPER(TRIM(postcode)))
+	        UPPER(TRIM(postcode)) AS postcode,
+	        lsoa21
+	
+	    FROM swansea.summary_postcode_lsoa_oa_population
+	
+	    WHERE postcode IS NOT NULL
+	      AND lsoa21 IS NOT NULL
+	
+	    ORDER BY
+	        UPPER(TRIM(postcode)),
+	        lsoa21
+	)
+	
+	SELECT
+	    UPPER(TRIM(a.postcode)) AS postcode,
+	    pl.lsoa21 AS lsoa_code,
+	    a.estimated_accessible_jobs AS accessible_jobs,
+	    n.neet_proxy_percentage AS neet_percentage
+	
+	FROM swansea.postcode_accessibility_1800_1845 AS a
+	
+	LEFT JOIN postcode_lsoa AS pl
+	    ON UPPER(TRIM(a.postcode)) = pl.postcode
+	
+	LEFT JOIN swansea.neet AS n
+	    ON pl.lsoa21 = n.lsoa_code
+	
+	WHERE n.neet_proxy_percentage IS NOT NULL
+	  AND a.estimated_accessible_jobs IS NOT NULL
+	
+	ORDER BY
+	    n.neet_proxy_percentage DESC,
+	    a.estimated_accessible_jobs ASC,
+	    UPPER(TRIM(a.postcode));
+
+---------------------------------------------------------------------------------
+WITH postcode_lsoa AS (
+
+    SELECT DISTINCT ON (UPPER(TRIM(postcode)))
+        UPPER(TRIM(postcode)) AS postcode,
+        lsoa21
+
+    FROM swansea.summary_postcode_lsoa_oa_population
+
+    WHERE postcode IS NOT NULL
+      AND lsoa21 IS NOT NULL
+
+    ORDER BY
+        UPPER(TRIM(postcode)),
+        lsoa21
+),
+
+/* Ensure one NEET value per LSOA */
+unique_lsoa_neet AS (
+
+    SELECT
+        lsoa_code,
+        MAX(neet_proxy_percentage) AS neet_percentage
+
+    FROM swansea.neet
+
+    WHERE lsoa_code IS NOT NULL
+      AND neet_proxy_percentage IS NOT NULL
+
+    GROUP BY lsoa_code
+),
+
+/* Divide unique LSOAs into five NEET groups */
+lsoa_neet_groups AS (
+
+    SELECT
+        lsoa_code,
+        neet_percentage,
+
+        NTILE(5) OVER (
+            ORDER BY neet_percentage, lsoa_code
+        ) AS neet_group
+
+    FROM unique_lsoa_neet
+),
+
+/* Assign each postcode the NEET group of its LSOA */
+postcode_data AS (
+
+    SELECT
+        UPPER(TRIM(a.postcode)) AS postcode,
+        pl.lsoa21 AS lsoa_code,
+        a.estimated_accessible_jobs AS accessible_jobs,
+        ng.neet_percentage,
+        ng.neet_group
+
+    FROM swansea.postcode_accessibility_1800_1845 AS a
+
+    INNER JOIN postcode_lsoa AS pl
+        ON UPPER(TRIM(a.postcode)) = pl.postcode
+
+    INNER JOIN lsoa_neet_groups AS ng
+        ON pl.lsoa21 = ng.lsoa_code
+
+    WHERE a.estimated_accessible_jobs IS NOT NULL
+),
+
+/* Number postcodes within each NEET group for Excel layout */
+numbered_values AS (
+
+    SELECT
+        postcode,
+        lsoa_code,
+        accessible_jobs,
+        neet_percentage,
+        neet_group,
+
+        ROW_NUMBER() OVER (
+            PARTITION BY neet_group
+            ORDER BY postcode
+        ) AS row_number
+
+    FROM postcode_data
+)
+
+SELECT
+    row_number,
+
+    MAX(accessible_jobs) FILTER (
+        WHERE neet_group = 1
+    ) AS "Q1 - Lowest NEET",
+
+    MAX(accessible_jobs) FILTER (
+        WHERE neet_group = 2
+    ) AS "Q2",
+
+    MAX(accessible_jobs) FILTER (
+        WHERE neet_group = 3
+    ) AS "Q3",
+
+    MAX(accessible_jobs) FILTER (
+        WHERE neet_group = 4
+    ) AS "Q4",
+
+    MAX(accessible_jobs) FILTER (
+        WHERE neet_group = 5
+    ) AS "Q5 - Highest NEET"
+
+FROM numbered_values
+
+GROUP BY row_number
+ORDER BY row_number;
