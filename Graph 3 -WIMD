@@ -1,0 +1,148 @@
+WITH postcode_lsoa AS (
+
+    SELECT DISTINCT ON (UPPER(TRIM(postcode)))
+        UPPER(TRIM(postcode)) AS postcode,
+        lsoa21
+
+    FROM swansea.summary_postcode_lsoa_oa_population
+
+    WHERE postcode IS NOT NULL
+      AND lsoa21 IS NOT NULL
+
+    ORDER BY
+        UPPER(TRIM(postcode)),
+        lsoa21
+)
+
+SELECT
+    UPPER(TRIM(a.postcode)) AS postcode,
+    pl.lsoa21 AS lsoa_code,
+    a.estimated_accessible_jobs AS accessible_jobs,
+    w.wimd_wales_rank,
+    w.wimd_swansea_rank
+
+FROM swansea.postcode_accessibility_1800_1845 AS a
+
+LEFT JOIN postcode_lsoa AS pl
+    ON UPPER(TRIM(a.postcode)) = pl.postcode
+
+LEFT JOIN swansea.wimd AS w
+    ON pl.lsoa21 = w.area_code
+
+WHERE a.estimated_accessible_jobs IS NOT NULL
+  AND w.wimd_swansea_rank IS NOT NULL
+
+ORDER BY
+    w.wimd_swansea_rank ASC,
+    a.estimated_accessible_jobs ASC,
+    UPPER(TRIM(a.postcode));
+
+//-----------------------------------------------------------------------------------
+
+WITH postcode_lsoa AS (
+
+    SELECT DISTINCT ON (UPPER(TRIM(postcode)))
+        UPPER(TRIM(postcode)) AS postcode,
+        lsoa21
+
+    FROM swansea.summary_postcode_lsoa_oa_population
+
+    WHERE postcode IS NOT NULL
+      AND lsoa21 IS NOT NULL
+
+    ORDER BY
+        UPPER(TRIM(postcode)),
+        lsoa21
+),
+
+/* One WIMD record per LSOA */
+unique_lsoa_wimd AS (
+
+    SELECT
+        area_code AS lsoa_code,
+        wimd_swansea_rank
+
+    FROM swansea.wimd
+
+    WHERE wimd_swansea_rank IS NOT NULL
+),
+
+/* Divide Swansea LSOAs into five WIMD quintiles */
+lsoa_wimd_groups AS (
+
+    SELECT
+        lsoa_code,
+        wimd_swansea_rank,
+
+        NTILE(5) OVER (
+            ORDER BY wimd_swansea_rank
+        ) AS wimd_group
+
+    FROM unique_lsoa_wimd
+),
+
+/* Assign each postcode its WIMD quintile */
+postcode_data AS (
+
+    SELECT
+        UPPER(TRIM(a.postcode)) AS postcode,
+        pl.lsoa21 AS lsoa_code,
+        a.estimated_accessible_jobs AS accessible_jobs,
+        wg.wimd_swansea_rank,
+        wg.wimd_group
+
+    FROM swansea.postcode_accessibility_0700_0745 AS a
+
+    INNER JOIN postcode_lsoa AS pl
+        ON UPPER(TRIM(a.postcode)) = pl.postcode
+
+    INNER JOIN lsoa_wimd_groups AS wg
+        ON pl.lsoa21 = wg.lsoa_code
+
+    WHERE a.estimated_accessible_jobs IS NOT NULL
+),
+
+/* Number postcodes within each WIMD group */
+numbered_values AS (
+
+    SELECT
+        postcode,
+        lsoa_code,
+        accessible_jobs,
+        wimd_group,
+
+        ROW_NUMBER() OVER (
+            PARTITION BY wimd_group
+            ORDER BY postcode
+        ) AS row_number
+
+    FROM postcode_data
+)
+
+SELECT
+    row_number,
+
+    MAX(accessible_jobs) FILTER (
+        WHERE wimd_group = 1
+    ) AS "Q1 - Most Deprived",
+
+    MAX(accessible_jobs) FILTER (
+        WHERE wimd_group = 2
+    ) AS "Q2",
+
+    MAX(accessible_jobs) FILTER (
+        WHERE wimd_group = 3
+    ) AS "Q3",
+
+    MAX(accessible_jobs) FILTER (
+        WHERE wimd_group = 4
+    ) AS "Q4",
+
+    MAX(accessible_jobs) FILTER (
+        WHERE wimd_group = 5
+    ) AS "Q5 - Least Deprived"
+
+FROM numbered_values
+
+GROUP BY row_number
+ORDER BY row_number;
