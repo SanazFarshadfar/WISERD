@@ -1,23 +1,63 @@
-DROP TABLE IF EXISTS swansea.postcode_accessibility_points;
+DROP TABLE IF EXISTS swansea.postcode_accessibility_analysis;
 
-CREATE TABLE swansea.postcode_accessibility_points AS
+CREATE TABLE swansea.postcode_accessibility_analysis AS
+
+WITH coords AS (
+    SELECT
+        a.postcode,
+
+        COALESCE(
+            p.lat::double precision,
+            w.latitude
+        ) AS latitude,
+
+        COALESCE(
+            p.long::double precision,
+            w.longitude
+        ) AS longitude
+
+    FROM swansea.postcode_accessibility_0700_0745 a
+
+    LEFT JOIN swansea.lsoa_oa_postcode_swansea p
+        ON UPPER(TRIM(a.postcode)) = UPPER(TRIM(p.pcds))
+
+    LEFT JOIN swansea.welsh_postcodes w
+        ON UPPER(TRIM(a.postcode)) = UPPER(TRIM(w.postcode))
+)
 
 SELECT
-    p.pcds AS postcode,
-    p.oa21,
-    p.lsoa21,
+    c.postcode,
+    c.latitude,
+    c.longitude,
 
-    p.lat::double precision AS latitude,
-    p.long::double precision AS longitude,
+    a07.estimated_accessible_jobs::numeric AS access_0700_0745,
+    a08.estimated_accessible_jobs::numeric AS access_0800_0845,
+    a13.estimated_accessible_jobs::numeric AS access_1300_1345,
+    a18.estimated_accessible_jobs::numeric AS access_1800_1845,
 
     ST_SetSRID(
         ST_MakePoint(
-            p.long::double precision,
-            p.lat::double precision
+            c.longitude,
+            c.latitude
         ),
         4326
     ) AS geom
 
-FROM swansea.lsoa_oa_postcode_swansea p
-WHERE p.lat IS NOT NULL
-  AND p.long IS NOT NULL;
+FROM coords c
+
+JOIN swansea.postcode_accessibility_0700_0745 a07
+    ON UPPER(TRIM(c.postcode)) = UPPER(TRIM(a07.postcode))
+
+JOIN swansea.postcode_accessibility_0800_0845 a08
+    ON UPPER(TRIM(c.postcode)) = UPPER(TRIM(a08.postcode))
+
+JOIN swansea.postcode_accessibility_1300_1345 a13
+    ON UPPER(TRIM(c.postcode)) = UPPER(TRIM(a13.postcode))
+
+JOIN swansea.postcode_accessibility_1800_1845 a18
+    ON UPPER(TRIM(c.postcode)) = UPPER(TRIM(a18.postcode))
+
+WHERE c.latitude IS NOT NULL
+  AND c.longitude IS NOT NULL
+
+ORDER BY c.postcode;
