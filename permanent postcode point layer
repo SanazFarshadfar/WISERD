@@ -1,0 +1,23 @@
+DROP TABLE IF EXISTS swansea.postcode_accessibility_points;
+
+CREATE TABLE swansea.postcode_accessibility_points AS
+
+SELECT
+    p.pcds AS postcode,
+    p.oa21,
+    p.lsoa21,
+
+    p.lat::double precision AS latitude,
+    p.long::double precision AS longitude,
+
+    ST_SetSRID(
+        ST_MakePoint(
+            p.long::double precision,
+            p.lat::double precision
+        ),
+        4326
+    ) AS geom
+
+FROM swansea.lsoa_oa_postcode_swansea p
+WHERE p.lat IS NOT NULL
+  AND p.long IS NOT NULL;
