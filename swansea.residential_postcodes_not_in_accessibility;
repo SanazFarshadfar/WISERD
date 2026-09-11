@@ -1,0 +1,30 @@
+DROP TABLE IF EXISTS swansea.residential_postcodes_not_in_accessibility;
+
+CREATE TABLE swansea.residential_postcodes_not_in_accessibility AS
+
+SELECT
+    p.postcode,
+    p.lsoa21,
+    p.oa21,
+    p.population,
+    w.latitude,
+    w.longitude,
+    ST_SetSRID(
+        ST_MakePoint(w.longitude, w.latitude),
+        4326
+    ) AS geom
+
+FROM swansea.summary_postcode_lsoa_oa_population p
+
+LEFT JOIN swansea.postcode_accessibility_analysis a
+    ON UPPER(TRIM(p.postcode)) = UPPER(TRIM(a.postcode))
+
+LEFT JOIN swansea.welsh_postcodes w
+    ON UPPER(TRIM(p.postcode)) = UPPER(TRIM(w.postcode))
+
+WHERE p.population > 0
+  AND a.postcode IS NULL
+  AND w.latitude IS NOT NULL
+  AND w.longitude IS NOT NULL
+
+ORDER BY p.postcode;
