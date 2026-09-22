@@ -1,0 +1,25 @@
+CREATE OR REPLACE VIEW swansea.swansea_postcodes_population_qgis AS
+
+SELECT
+    w.postcode,
+    w.geom,
+    w.latitude,
+    w.longitude,
+    w.easting,
+    w.northing,
+    w."lsoa21 code",
+    w."census output area 2021",
+    w.district,
+    w."district code",
+
+    p.female,
+    p.male,
+    p.total
+
+FROM swansea.welsh_postcodes AS w
+
+LEFT JOIN swansea.swansea_postcode AS p
+    ON REPLACE(UPPER(TRIM(w.postcode)), ' ', '') =
+       REPLACE(UPPER(TRIM(p.postcode)), ' ', '')
+
+WHERE w."district code" = 'W06000011';
