@@ -1,0 +1,29 @@
+CREATE TABLE swansea.accessibility_all_swansea_postcodes AS
+
+SELECT
+    p.postcode,
+    p.geom,
+    p."lsoa21 code",
+
+    COALESCE(a07.estimated_accessible_jobs, 0) AS access_0700,
+    COALESCE(a08.estimated_accessible_jobs, 0) AS access_0800,
+    COALESCE(a13.estimated_accessible_jobs, 0) AS access_1300,
+    COALESCE(a18.estimated_accessible_jobs, 0) AS access_1800
+
+FROM swansea.swansea_postcodes_population_qgis p
+
+LEFT JOIN swansea.postcode_accessibility_0700_0745 a07
+    ON REPLACE(UPPER(TRIM(p.postcode)), ' ', '') =
+       REPLACE(UPPER(TRIM(a07.postcode)), ' ', '')
+
+LEFT JOIN swansea.postcode_accessibility_0800_0845 a08
+    ON REPLACE(UPPER(TRIM(p.postcode)), ' ', '') =
+       REPLACE(UPPER(TRIM(a08.postcode)), ' ', '')
+
+LEFT JOIN swansea.postcode_accessibility_1300_1345 a13
+    ON REPLACE(UPPER(TRIM(p.postcode)), ' ', '') =
+       REPLACE(UPPER(TRIM(a13.postcode)), ' ', '')
+
+LEFT JOIN swansea.postcode_accessibility_1800_1845 a18
+    ON REPLACE(UPPER(TRIM(p.postcode)), ' ', '') =
+       REPLACE(UPPER(TRIM(a18.postcode)), ' ', '');
