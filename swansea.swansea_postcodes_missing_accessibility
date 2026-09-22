@@ -1,0 +1,25 @@
+DROP TABLE IF EXISTS swansea.swansea_postcodes_missing_accessibility;
+
+CREATE TABLE swansea.swansea_postcodes_missing_accessibility AS
+
+SELECT
+    p.*
+FROM swansea.swansea_postcodes_population_qgis AS p
+WHERE NOT EXISTS (
+
+    SELECT 1
+    FROM (
+        SELECT postcode FROM swansea.postcode_accessibility_0700_0745
+        UNION
+        SELECT postcode FROM swansea.postcode_accessibility_0800_0845
+        UNION
+        SELECT postcode FROM swansea.postcode_accessibility_1300_1345
+        UNION
+        SELECT postcode FROM swansea.postcode_accessibility_1800_1845
+        UNION
+        SELECT postcode FROM swansea.postcode_accessibility_1900_1945
+    ) AS a
+
+    WHERE REPLACE(UPPER(TRIM(a.postcode)), ' ', '') =
+          REPLACE(UPPER(TRIM(p.postcode)), ' ', '')
+);
