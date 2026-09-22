@@ -16,8 +16,7 @@ WHERE NOT EXISTS (
         SELECT postcode FROM swansea.postcode_accessibility_1300_1345
         UNION
         SELECT postcode FROM swansea.postcode_accessibility_1800_1845
-        UNION
-        SELECT postcode FROM swansea.postcode_accessibility_1900_1945
+     
     ) AS a
 
     WHERE REPLACE(UPPER(TRIM(a.postcode)), ' ', '') =
