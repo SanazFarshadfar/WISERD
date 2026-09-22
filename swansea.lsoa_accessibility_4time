@@ -1,0 +1,46 @@
+DROP TABLE IF EXISTS swansea.lsoa_accessibility_4times;
+
+CREATE TABLE swansea.lsoa_accessibility_4times AS
+
+SELECT
+    a."lsoa21 code" AS lsoa21cd,
+
+    COUNT(*) AS residential_postcodes,
+    SUM(p.total) AS population,
+
+    ROUND(
+        SUM(a.access_0700::numeric * p.total) /
+        NULLIF(SUM(p.total), 0),
+        2
+    ) AS access_0700,
+
+    ROUND(
+        SUM(a.access_0800::numeric * p.total) /
+        NULLIF(SUM(p.total), 0),
+        2
+    ) AS access_0800,
+
+    ROUND(
+        SUM(a.access_1300::numeric * p.total) /
+        NULLIF(SUM(p.total), 0),
+        2
+    ) AS access_1300,
+
+    ROUND(
+        SUM(a.access_1800::numeric * p.total) /
+        NULLIF(SUM(p.total), 0),
+        2
+    ) AS access_1800
+
+FROM swansea.accessibility_all_swansea_postcodes AS a
+
+JOIN swansea.swansea_postcodes_population_qgis AS p
+    ON REPLACE(UPPER(TRIM(a.postcode)), ' ', '') =
+       REPLACE(UPPER(TRIM(p.postcode)), ' ', '')
+
+WHERE p.total > 0
+  AND a."lsoa21 code" IS NOT NULL
+
+GROUP BY a."lsoa21 code"
+
+ORDER BY a."lsoa21 code";
