@@ -1,0 +1,23 @@
+DROP TABLE IF EXISTS swansea.lsoa_accessibility_4times_spatial;
+
+CREATE TABLE swansea.lsoa_accessibility_4times_spatial AS
+SELECT
+    l.lsoa21cd,
+    l.lsoa21nm,
+    l.lsoa21nmw,
+    l.bng_e,
+    l.bng_n,
+    l.lat,
+    l.long,
+    l.globalid,
+    a.residential_postcodes,
+    a.population,
+    a.access_0700,
+    a.access_0800,
+    a.access_1300,
+    a.access_1800,
+    l.geom
+FROM swansea.lsoa2021_wales AS l
+JOIN swansea.lsoa_accessibility_4times AS a
+    ON l.lsoa21cd = a.lsoa21cd
+WHERE l.lsoa21nm ILIKE 'Swansea %';
