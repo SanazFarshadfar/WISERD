@@ -1,0 +1,34 @@
+DROP TABLE IF EXISTS swansea.oa_accessibility_4times_spatial;
+
+CREATE TABLE swansea.oa_accessibility_4times_spatial AS
+
+SELECT
+    a.oa21cd,
+    o.lsoa21cd,
+    o.lsoa21nm,
+    o.lsoa21nmw,
+    o.bng_e,
+    o.bng_n,
+    o.lat,
+    o.long,
+
+    a.residential_postcodes,
+    a.population,
+
+    a.access_0700,
+    a.access_0800,
+    a.access_1300,
+    a.access_1800,
+
+    ST_SetSRID(
+        ST_MakePoint(o.bng_e, o.bng_n),
+        27700
+    ) AS geom
+
+FROM swansea.oa_accessibility_4times a
+
+INNER JOIN swansea.oas_2021_swansea o
+    ON a.oa21cd = o.oa21cd
+
+WHERE o.bng_e IS NOT NULL
+  AND o.bng_n IS NOT NULL;
