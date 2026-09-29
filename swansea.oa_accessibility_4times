@@ -6,39 +6,43 @@ SELECT
     s.oa21 AS oa21cd,
 
     COUNT(*) AS residential_postcodes,
-    SUM(s.population) AS population,
+    SUM(p.total) AS population,
 
     ROUND(
-        SUM(a.access_0700::numeric * s.population) /
-        NULLIF(SUM(s.population), 0),
+        SUM(a.access_0700::numeric * p.total) /
+        NULLIF(SUM(p.total), 0),
         2
     ) AS access_0700,
 
     ROUND(
-        SUM(a.access_0800::numeric * s.population) /
-        NULLIF(SUM(s.population), 0),
+        SUM(a.access_0800::numeric * p.total) /
+        NULLIF(SUM(p.total), 0),
         2
     ) AS access_0800,
 
     ROUND(
-        SUM(a.access_1300::numeric * s.population) /
-        NULLIF(SUM(s.population), 0),
+        SUM(a.access_1300::numeric * p.total) /
+        NULLIF(SUM(p.total), 0),
         2
     ) AS access_1300,
 
     ROUND(
-        SUM(a.access_1800::numeric * s.population) /
-        NULLIF(SUM(s.population), 0),
+        SUM(a.access_1800::numeric * p.total) /
+        NULLIF(SUM(p.total), 0),
         2
     ) AS access_1800
 
 FROM swansea.accessibility_all_swansea_postcodes a
 
+JOIN swansea.swansea_postcodes_population_qgis p
+    ON REPLACE(UPPER(TRIM(a.postcode)), ' ', '') =
+       REPLACE(UPPER(TRIM(p.postcode)), ' ', '')
+
 JOIN swansea.summary_postcode_lsoa_oa_population s
     ON REPLACE(UPPER(TRIM(a.postcode)), ' ', '') =
        REPLACE(UPPER(TRIM(s.postcode)), ' ', '')
 
-WHERE s.population > 0
+WHERE p.total > 0
   AND s.oa21 IS NOT NULL
 
 GROUP BY s.oa21
